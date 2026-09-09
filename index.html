@@ -128,6 +128,7 @@ const FIREBASE = {
   appId: "1:979881189960:web:9102eb6f9d9b3bac52ae7d"
 };
 const RADICE = "mercato";   /* cambia stringa per aprire un mercato nuovo da zero */
+const VERSIONE = "v2";
 
 /* ══════════════════════════════════════════════════════════════ */
 
@@ -179,7 +180,7 @@ function partenza(){
     db = FB.getDatabase(app);
     avvio();
   }catch(e){
-    APP.innerHTML='<div class="card" style="margin-top:40px"><div class="rosa-h"><b>Configurazione non valida</b></div>'
+    APP.innerHTML='<div class="card" style="margin-top:40px"><div class="rosa-h"><b>Configurazione non valida</b><span>'+VERSIONE+'</span></div>'
       +'<p class="piccolo">'+esc(e.message)+'</p></div>';
   }
 }
@@ -429,7 +430,7 @@ function vistaIngresso(){
       <div style="height:14px"></div>
       <button class="btn primario" id="entra" style="width:100%">Entra nella sala</button>
     </div>
-    <p class="piccolo">Chi entra per primo diventa banditore: carica il listone e aggiudica i giocatori.</p>
+    <p class="piccolo">Chi entra per primo diventa banditore: carica il listone e aggiudica i giocatori. <span style="opacity:.6">${VERSIONE}</span></p>
   </div>`;
 }
 
