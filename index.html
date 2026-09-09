@@ -170,18 +170,17 @@ let db=null, st={
   asta:null, utenti:{}, storico:[], listone:[], admin:null, presenti:{}, online:false, pronto:false
 };
 
-if(FB){
+function partenza(){
+  if(!FB) return;
   const conf = configurazione();
-  if(!conf) mostraGuida();
-  else {
-    try{
-      const app = FB.initializeApp(conf);
-      db = FB.getDatabase(app);
-      avvio();
-    }catch(e){
-      APP.innerHTML='<div class="card" style="margin-top:40px"><div class="rosa-h"><b>Configurazione non valida</b></div>'
-        +'<p class="piccolo">'+esc(e.message)+'</p></div>';
-    }
+  if(!conf){ mostraGuida(); return; }
+  try{
+    const app = FB.initializeApp(conf);
+    db = FB.getDatabase(app);
+    avvio();
+  }catch(e){
+    APP.innerHTML='<div class="card" style="margin-top:40px"><div class="rosa-h"><b>Configurazione non valida</b></div>'
+      +'<p class="piccolo">'+esc(e.message)+'</p></div>';
   }
 }
 
@@ -649,6 +648,8 @@ function collega(){
     toast('Mercato azzerato');
   };
 }
+
+partenza();
 </script>
 </body>
 </html>
