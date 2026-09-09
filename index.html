@@ -128,7 +128,7 @@ const FIREBASE = {
   appId: "1:979881189960:web:9102eb6f9d9b3bac52ae7d"
 };
 const RADICE = "mercato";   /* cambia stringa per aprire un mercato nuovo da zero */
-const VERSIONE = "v2";
+const VERSIONE = "v3";
 
 /* ══════════════════════════════════════════════════════════════ */
 
@@ -198,7 +198,8 @@ function avvio(){
 
   FB.onValue(R('asta'), s=>{ st.asta=s.val(); gestisciConto(); render(); });
   FB.onValue(R('utenti'), s=>{ st.utenti=s.val()||{}; render(); });
-  FB.onValue(R('storico'), s=>{ const v=s.val()||{}; st.storico=Object.values(v).sort((a,b)=>a.ts-b.ts); render(); });
+  FB.onValue(R('storico'), s=>{ const v=s.val()||{};
+    st.storico=Object.entries(v).map(([k,o])=>Object.assign({chiave:k},o)).sort((a,b)=>a.ts-b.ts); render(); });
   FB.onValue(R('config'), s=>{ const c=s.val(); st.admin=c&&c.admin; render(); });
   FB.onValue(R('listone'), s=>{ st.listone=s.val()||[]; render(); });
   FB.onValue(R('presenza'), s=>{ st.presenti=s.val()||{}; render(); });
@@ -263,7 +264,6 @@ async function chiama(g){
 async function offri(imp){
   const a=st.asta; if(!a || a.stato!=='aperta') return;
   if(imp>mieiCrediti()){ toast('Hai solo '+mieiCrediti()+' crediti'); return; }
-  if(imp===0){ await scrivi('asta/risposte/'+st.io, 0); toast('Hai passato su '+a.nome); return; }
   const res = await FB.runTransaction(R('asta'), x=>{
     if(!x || x.stato!=='aperta' || x.id!==a.id) return;
     if(imp <= (x.prezzo||0)) return;
@@ -272,6 +272,39 @@ async function offri(imp){
     return x;
   });
   if(!res.committed) toast('Rilancio non valido: qualcuno ti ha superato');
+}
+
+/* ritiro: vale sia come "non mi interessa" sia come annullamento di un rilancio sbagliato */
+async function ritirati(){
+  const a=st.asta; if(!a || a.stato!=='aperta') return;
+  await FB.runTransaction(R('asta'), x=>{
+    if(!x || x.stato!=='aperta' || x.id!==a.id) return;
+    const r = Object.assign({}, x.risposte||{});
+    r[st.io] = 0;
+    let leader=null, prezzo=0;
+    for(const u in r){ if(r[u]>prezzo){ prezzo=r[u]; leader=u; } }
+    x.risposte=r; x.leader=leader; x.prezzo=prezzo||x.base; x.contoFine=0;
+    return x;
+  });
+  toast(a.leader===st.io ? 'Offerta ritirata' : 'Hai passato su '+a.nome);
+}
+
+async function annullaChiamata(){
+  if(!confirm('Annullare la chiamata di '+st.asta.nome+'? Nessuno se lo aggiudica.')) return;
+  await scrivi('asta', null);
+  st.tab='listone'; render();
+}
+
+async function annullaAcquisto(v){
+  if(!confirm('Annullare l\u2019acquisto di '+v.nome+'? I '+v.prezzo+' crediti tornano a '+nomeDi(v.vincitore)+'.')) return;
+  await FB.remove(R('storico/'+v.chiave));
+  await FB.runTransaction(R('utenti/'+v.vincitore+'/crediti'), c=>(c||0)+v.prezzo);
+  toast('Acquisto annullato');
+}
+
+async function correggiCrediti(id,n){
+  await scrivi('utenti/'+id+'/crediti', Math.max(0,parseInt(n,10)||0));
+  toast('Crediti di '+nomeDi(id)+' aggiornati');
 }
 
 async function avviaConto(sec){
@@ -468,7 +501,7 @@ function vistaAsta(){
     <div class="squadra">${esc(a.squadra||'')} · base ${a.base}</div>
     <div class="ruoli">${chipRuoli(a.ruoli)}</div>
     <div class="cifra"><b class="num">${prezzo}</b><i>crediti</i></div>
-    <div class="leader">in testa <b>${esc(nomeDi(a.leader))}</b></div>
+    <div class="leader">${a.leader?`in testa <b>${esc(nomeDi(a.leader))}</b>`:'nessuna offerta'}</div>
     ${a.contoFine?`<div class="conto num">Si chiude tra ${secondi}s</div>`:''}
     <div class="rilanci">
       ${[1,2,5,10].map(d=>`<button data-rilancio="${d}" ${mieiCrediti()<prezzo+d?'disabled':''}>+${d}</button>`).join('')}
@@ -478,11 +511,14 @@ function vistaAsta(){
       <button class="btn" id="offInvia" style="flex:0 0 92px">Offri</button>
     </div>
     <div style="height:8px"></div>
-    <button class="btn rosso" id="passo" style="width:100%" ${mia===0?'disabled':''}>${mia===0?'Hai passato':'Non mi interessa'}</button>
+    <button class="btn rosso" id="passo" style="width:100%" ${mia===0?'disabled':''}>${
+      mia===0 ? 'Ti sei ritirato' : (inTesta ? 'Ritira la mia offerta' : 'Non mi interessa')}</button>
     ${capo?`<div class="sep"></div><div class="riga">
       <button class="btn" id="conto15">${a.contoFine?'Ferma il conto':'Conto da 15s'}</button>
-      <button class="btn verde" id="agg">Aggiudica a ${prezzo}</button>
-    </div>`:''}
+      <button class="btn verde" id="agg" ${a.leader?'':'disabled'}>Aggiudica a ${prezzo}</button>
+    </div>
+    <div style="height:8px"></div>
+    <button class="btn rosso" id="annulla" style="width:100%">Annulla la chiamata</button>`:''}
     <div class="esiti">
       ${Object.keys(st.utenti).map(u=>{
         const v=risposte[u];
@@ -498,10 +534,13 @@ function vistaAsta(){
 
 function storicoBreve(){
   if(!st.storico.length) return '';
+  const capo = st.admin===st.io;
   return `<div class="card"><div class="rosa-h"><b>Ultimi acquisti</b></div>
     ${st.storico.slice(-5).reverse().map(v=>`<div class="acq">
       <span style="color:var(--text)">${esc(v.nome)}</span>
-      <span>${esc(nomeDi(v.vincitore))} · <b style="color:var(--oro)" class="num">${v.prezzo}</b></span></div>`).join('')}</div>`;
+      <span>${esc(nomeDi(v.vincitore))} · <b style="color:var(--oro)" class="num">${v.prezzo}</b>${
+        capo?` <button data-annulla="${v.chiave}" style="color:var(--rosso);font-weight:700;margin-left:6px">annulla</button>`:''
+      }</span></div>`).join('')}</div>`;
 }
 
 function vistaListone(){
@@ -543,6 +582,7 @@ function vistaListone(){
 function vistaRose(){
   const ids=Object.keys(st.utenti);
   if(!ids.length) return '<div class="card vuoto">Nessuno è ancora entrato.</div>';
+  const capo = st.admin===st.io;
   return `<div>
     ${ids.map(u=>{
       const acq=st.storico.filter(v=>v.vincitore===u);
@@ -551,6 +591,10 @@ function vistaRose(){
         <div class="rosa-h"><b>${esc(nomeDi(u))}</b><span class="num">${acq.length} acquisti · ${spesi} spesi · ${st.utenti[u].crediti} residui</span></div>
         ${acq.length?acq.map(v=>`<div class="acq"><span style="color:var(--text)">${esc(v.nome)} ${chipRuoli(v.ruoli)}</span><span class="num">${v.prezzo}</span></div>`).join('')
           :'<p class="piccolo" style="margin:4px 0 0">Ancora nessun acquisto.</p>'}
+        ${capo?`<div style="height:10px"></div><div class="riga">
+          <input type="number" inputmode="numeric" id="cr-${u}" value="${st.utenti[u].crediti}" min="0">
+          <button class="btn" data-crediti="${u}" style="flex:0 0 108px">Correggi</button>
+        </div>`:''}
       </div>`;
     }).join('')}
     <p class="piccolo">Limiti della lega: massimo 30 giocatori in rosa, minimo 2 portieri.</p>
@@ -627,7 +671,14 @@ function collega(){
     offri(p+parseInt(b.dataset.rilancio,10));
   });
   const oi=$('#offInvia'); if(oi) oi.onclick=()=>{ const v=parseInt($('#offLibera').value||'0',10); if(v>0) offri(v); };
-  const ps=$('#passo'); if(ps) ps.onclick=()=>offri(0);
+  const ps=$('#passo'); if(ps) ps.onclick=ritirati;
+  const an=$('#annulla'); if(an) an.onclick=annullaChiamata;
+  document.querySelectorAll('[data-annulla]').forEach(b=>b.onclick=()=>{
+    const v=st.storico.find(x=>x.chiave===b.dataset.annulla); if(v) annullaAcquisto(v);
+  });
+  document.querySelectorAll('[data-crediti]').forEach(b=>b.onclick=()=>{
+    const u=b.dataset.crediti; correggiCrediti(u, $('#cr-'+u).value);
+  });
   const ag=$('#agg'); if(ag) ag.onclick=aggiudica;
   const c15=$('#conto15'); if(c15) c15.onclick=()=> st.asta.contoFine?fermaConto():avviaConto(15);
   const nv=$('#nuova'); if(nv) nv.onclick=nuovaChiamata;
