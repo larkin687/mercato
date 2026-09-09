@@ -128,7 +128,7 @@ const FIREBASE = {
   appId: "1:979881189960:web:9102eb6f9d9b3bac52ae7d"
 };
 const RADICE = "mercato";   /* cambia stringa per aprire un mercato nuovo da zero */
-const VERSIONE = "v3";
+const VERSIONE = "v4";
 
 /* ══════════════════════════════════════════════════════════════ */
 
@@ -305,6 +305,20 @@ async function annullaAcquisto(v){
 async function correggiCrediti(id,n){
   await scrivi('utenti/'+id+'/crediti', Math.max(0,parseInt(n,10)||0));
   toast('Crediti di '+nomeDi(id)+' aggiornati');
+}
+
+async function rimuoviRosa(id){
+  if(id===st.io){ toast('Non puoi togliere la tua squadra'); return; }
+  if(st.asta && st.asta.stato==='aperta'){ toast('Chiudi o annulla l\u2019asta in corso prima'); return; }
+  const acq = st.storico.filter(v=>v.vincitore===id);
+  const messaggio = acq.length
+    ? 'Togliere '+nomeDi(id)+'? I suoi '+acq.length+' acquisti vengono annullati e quei giocatori tornano chiamabili.'
+    : 'Togliere '+nomeDi(id)+' dalla sala?';
+  if(!confirm(messaggio)) return;
+  for(const v of acq) await FB.remove(R('storico/'+v.chiave));
+  await FB.remove(R('utenti/'+id));
+  await FB.remove(R('presenza/'+id));
+  toast(nomeDi(id)+' rimossa');
 }
 
 async function avviaConto(sec){
@@ -594,7 +608,9 @@ function vistaRose(){
         ${capo?`<div style="height:10px"></div><div class="riga">
           <input type="number" inputmode="numeric" id="cr-${u}" value="${st.utenti[u].crediti}" min="0">
           <button class="btn" data-crediti="${u}" style="flex:0 0 108px">Correggi</button>
-        </div>`:''}
+        </div>
+        ${u===st.io?'':`<div style="height:8px"></div>
+          <button class="btn rosso" data-rimuovi="${u}" style="width:100%">Togli questa squadra</button>`}`:''}
       </div>`;
     }).join('')}
     <p class="piccolo">Limiti della lega: massimo 30 giocatori in rosa, minimo 2 portieri.</p>
@@ -679,6 +695,7 @@ function collega(){
   document.querySelectorAll('[data-crediti]').forEach(b=>b.onclick=()=>{
     const u=b.dataset.crediti; correggiCrediti(u, $('#cr-'+u).value);
   });
+  document.querySelectorAll('[data-rimuovi]').forEach(b=>b.onclick=()=>rimuoviRosa(b.dataset.rimuovi));
   const ag=$('#agg'); if(ag) ag.onclick=aggiudica;
   const c15=$('#conto15'); if(c15) c15.onclick=()=> st.asta.contoFine?fermaConto():avviaConto(15);
   const nv=$('#nuova'); if(nv) nv.onclick=nuovaChiamata;
