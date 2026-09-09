@@ -58,6 +58,11 @@
   .vuoto b{display:block;color:var(--text);font-size:17px;margin-bottom:6px}
 
   .palco{background:linear-gradient(170deg,#202b45,#161e30);border:1px solid #33405e;border-radius:18px;padding:18px 16px 16px;margin-bottom:12px}
+  .palco.compatta{padding:14px 14px 13px}
+  .palco.compatta .nome-gio{font-size:clamp(21px,5.5vw,26px)}
+  .palco.compatta .cifra{margin:11px 0 3px}
+  .palco.compatta .cifra b{font-size:42px}
+  .palco.compatta .rilanci button{padding:11px 0;font-size:16px}
   .chiamante{font-size:12.5px;color:var(--muted);margin-bottom:2px}
   .nome-gio{font-size:clamp(26px,7.5vw,34px);font-weight:800;letter-spacing:-.025em;line-height:1.08;margin:0}
   .squadra{color:var(--muted);font-size:13.5px;margin-top:3px}
@@ -128,7 +133,7 @@ const FIREBASE = {
   appId: "1:979881189960:web:9102eb6f9d9b3bac52ae7d"
 };
 const RADICE = "mercato";   /* cambia stringa per aprire un mercato nuovo da zero */
-const VERSIONE = "v4";
+const VERSIONE = "v5";
 
 /* ══════════════════════════════════════════════════════════════ */
 
@@ -168,7 +173,7 @@ try{
 
 let db=null, st={
   io:null, nome:'', tab:'asta', filtro:'', ruoloF:'',
-  asta:null, utenti:{}, storico:[], listone:[], admin:null, presenti:{}, online:false, pronto:false
+  aste:[], utenti:{}, storico:[], listone:[], admin:null, presenti:{}, online:false, pronto:false
 };
 
 function partenza(){
@@ -196,7 +201,10 @@ function avvio(){
   const salvato = memoria('io');
   if(salvato){ const o=JSON.parse(salvato); st.io=o.id; st.nome=o.nome; st.pronto=true; }
 
-  FB.onValue(R('asta'), s=>{ st.asta=s.val(); gestisciConto(); render(); });
+  FB.onValue(R('aste'), s=>{ const v=s.val()||{};
+    st.aste = Object.entries(v).map(([k,o])=>Object.assign({chiave:k},o))
+      .sort((a,b)=>(b.contoFine?1:0)-(a.contoFine?1:0) || a.ts-b.ts);
+    gestisciConti(); render(); });
   FB.onValue(R('utenti'), s=>{ st.utenti=s.val()||{}; render(); });
   FB.onValue(R('storico'), s=>{ const v=s.val()||{};
     st.storico=Object.entries(v).map(([k,o])=>Object.assign({chiave:k},o)).sort((a,b)=>a.ts-b.ts); render(); });
@@ -205,7 +213,7 @@ function avvio(){
   FB.onValue(R('presenza'), s=>{ st.presenti=s.val()||{}; render(); });
   FB.onValue(FB.ref(db,'.info/connected'), s=>{ st.online=!!s.val(); if(s.val()) presenza(); render(); });
 
-  setInterval(()=>{ if(st.asta&&st.asta.contoFine) render(); }, 1000);
+  setInterval(()=>{ if(st.aste.some(a=>a.contoFine)){ gestisciConti(); render(); } }, 1000);
   render();
 }
 
@@ -236,36 +244,44 @@ async function registra(nome,crediti){
 }
 const mieiCrediti = () => (st.utenti[st.io] && st.utenti[st.io].crediti) || 0;
 const nomeDi = id => id ? ((st.utenti[id]&&st.utenti[id].nome) || id.replace(/-/g,' ')) : '—';
-const banditore = () => st.asta && (st.asta.chiamataDa===st.io || st.admin===st.io);
+const capoDi = a => a && (a.chiamataDa===st.io || st.admin===st.io);
+/* crediti già bloccati dalle aste in cui sono in testa (escludendo quella su cui sto offrendo) */
+function impegnati(esclusa){
+  return st.aste.reduce((s,a)=>(a.leader===st.io && a.chiave!==esclusa) ? s+(a.prezzo||0) : s, 0);
+}
+const disponibili = esclusa => mieiCrediti() - impegnati(esclusa);
+const inAsta = nome => st.aste.some(a=>a.nome.toLowerCase()===String(nome).toLowerCase());
 
 async function aggiornaCrediti(n){
   await scrivi('utenti/'+st.io+'/crediti', Math.max(0,parseInt(n,10)||0));
   toast('Crediti aggiornati');
 }
 
-/* ---------- asta ---------- */
+/* ---------- aste (più di una alla volta) ---------- */
+const astaDi = k => st.aste.find(a=>a.chiave===k);
+
 async function chiama(g){
   if(!g) return;
   const base=Math.max(1,g.base||1);
-  if(base>mieiCrediti()){ toast('Base '+base+', tu hai '+mieiCrediti()); return; }
-  const nuova={
-    id:'a'+Date.now().toString(36), nome:g.nome, squadra:g.squadra||'', ruoli:g.ruoli||[],
-    base, chiamataDa:st.io, stato:'aperta', prezzo:base, leader:st.io,
+  if(inAsta(g.nome)){ toast(g.nome+' è già in asta'); return; }
+  if(base>disponibili()){ toast('Base '+base+', disponibili '+disponibili()); return; }
+  await FB.push(R('aste'), {
+    nome:g.nome, squadra:g.squadra||'', ruoli:g.ruoli||[],
+    base, chiamataDa:st.io, prezzo:base, leader:st.io,
     ts:Date.now(), contoFine:0, risposte:{[st.io]:base}
-  };
-  const res = await FB.runTransaction(R('asta'), a=>{
-    if(a && a.stato==='aperta') return;      /* qualcuno ha chiamato un attimo prima */
-    return nuova;
   });
-  if(!res.committed){ toast('C\u2019è già un\u2019asta aperta'); return; }
   st.tab='asta'; render();
 }
 
-async function offri(imp){
-  const a=st.asta; if(!a || a.stato!=='aperta') return;
-  if(imp>mieiCrediti()){ toast('Hai solo '+mieiCrediti()+' crediti'); return; }
-  const res = await FB.runTransaction(R('asta'), x=>{
-    if(!x || x.stato!=='aperta' || x.id!==a.id) return;
+async function offri(k,imp){
+  const a=astaDi(k); if(!a) return;
+  const disp=disponibili(k);
+  if(imp>disp){
+    toast(impegnati(k) ? 'Disponibili '+disp+': hai '+impegnati(k)+' impegnati in altre aste' : 'Hai solo '+disp+' crediti');
+    return;
+  }
+  const res = await FB.runTransaction(R('aste/'+k), x=>{
+    if(!x) return;
     if(imp <= (x.prezzo||0)) return;
     x.prezzo=imp; x.leader=st.io; x.ts=Date.now(); x.contoFine=0;
     x.risposte = Object.assign({}, x.risposte||{}, {[st.io]:imp});
@@ -275,10 +291,10 @@ async function offri(imp){
 }
 
 /* ritiro: vale sia come "non mi interessa" sia come annullamento di un rilancio sbagliato */
-async function ritirati(){
-  const a=st.asta; if(!a || a.stato!=='aperta') return;
-  await FB.runTransaction(R('asta'), x=>{
-    if(!x || x.stato!=='aperta' || x.id!==a.id) return;
+async function ritirati(k){
+  const a=astaDi(k); if(!a) return;
+  await FB.runTransaction(R('aste/'+k), x=>{
+    if(!x) return;
     const r = Object.assign({}, x.risposte||{});
     r[st.io] = 0;
     let leader=null, prezzo=0;
@@ -286,13 +302,13 @@ async function ritirati(){
     x.risposte=r; x.leader=leader; x.prezzo=prezzo||x.base; x.contoFine=0;
     return x;
   });
-  toast(a.leader===st.io ? 'Offerta ritirata' : 'Hai passato su '+a.nome);
+  toast(a.leader===st.io ? 'Offerta ritirata su '+a.nome : 'Hai passato su '+a.nome);
 }
 
-async function annullaChiamata(){
-  if(!confirm('Annullare la chiamata di '+st.asta.nome+'? Nessuno se lo aggiudica.')) return;
-  await scrivi('asta', null);
-  st.tab='listone'; render();
+async function annullaChiamata(k){
+  const a=astaDi(k); if(!a) return;
+  if(!confirm('Annullare la chiamata di '+a.nome+'? Nessuno se lo aggiudica.')) return;
+  await FB.remove(R('aste/'+k));
 }
 
 async function annullaAcquisto(v){
@@ -309,7 +325,7 @@ async function correggiCrediti(id,n){
 
 async function rimuoviRosa(id){
   if(id===st.io){ toast('Non puoi togliere la tua squadra'); return; }
-  if(st.asta && st.asta.stato==='aperta'){ toast('Chiudi o annulla l\u2019asta in corso prima'); return; }
+  if(st.aste.some(a=>a.leader===id)){ toast(nomeDi(id)+' è in testa in un\u2019asta: chiudila prima'); return; }
   const acq = st.storico.filter(v=>v.vincitore===id);
   const messaggio = acq.length
     ? 'Togliere '+nomeDi(id)+'? I suoi '+acq.length+' acquisti vengono annullati e quei giocatori tornano chiamabili.'
@@ -321,37 +337,42 @@ async function rimuoviRosa(id){
   toast(nomeDi(id)+' rimossa');
 }
 
-async function avviaConto(sec){
-  const a=st.asta; if(!a) return;
-  await aggiorna('asta',{contoFine:Date.now()+sec*1000, contoBase:a.prezzo});
+async function avviaConto(k,sec){
+  const a=astaDi(k); if(!a) return;
+  await aggiorna('aste/'+k,{contoFine:Date.now()+sec*1000});
 }
-async function fermaConto(){ await aggiorna('asta',{contoFine:0}); }
+async function fermaConto(k){ await aggiorna('aste/'+k,{contoFine:0}); }
 
-let chiusuraInCorso=false;
-function gestisciConto(){
-  const a=st.asta;
-  if(!a || a.stato!=='aperta' || !a.contoFine || !banditore() || chiusuraInCorso) return;
-  if(Date.now() > a.contoFine+300){ chiusuraInCorso=true; aggiudica().finally(()=>chiusuraInCorso=false); }
-}
-
-async function aggiudica(){
-  const a=st.asta; if(!a || a.stato!=='aperta') return;
-  const res = await FB.runTransaction(R('asta'), x=>{
-    if(!x || x.stato!=='aperta') return;
-    x.stato='chiusa'; x.vincitore=x.leader||null; x.contoFine=0; x.chiusaTs=Date.now();
-    return x;
-  });
-  if(!res.committed) return;
-  const fin = res.snapshot.val();
-  if(fin.vincitore){
-    await FB.push(R('storico'), {
-      nome:fin.nome, squadra:fin.squadra||'', ruoli:fin.ruoli||[],
-      vincitore:fin.vincitore, prezzo:fin.prezzo, ts:Date.now()
-    });
-    await FB.runTransaction(R('utenti/'+fin.vincitore+'/crediti'), c=>Math.max(0,(c||0)-fin.prezzo));
+const chiusureInCorso = new Set();
+function gestisciConti(){
+  for(const a of st.aste){
+    if(!a.contoFine || !capoDi(a) || chiusureInCorso.has(a.chiave)) continue;
+    if(Date.now() > a.contoFine+300){
+      chiusureInCorso.add(a.chiave);
+      aggiudica(a.chiave).finally(()=>chiusureInCorso.delete(a.chiave));
+    }
   }
 }
-async function nuovaChiamata(){ await scrivi('asta', null); st.tab='listone'; render(); }
+
+async function aggiudica(k){
+  let dati=null;
+  const res = await FB.runTransaction(R('aste/'+k), x=>{
+    if(!x) return;            /* già aggiudicata o annullata da un altro */
+    dati = x;
+    return null;              /* chiude l'asta rimuovendola dalla lista */
+  });
+  if(!res.committed || !dati) return;
+  if(dati.leader){
+    await FB.push(R('storico'), {
+      nome:dati.nome, squadra:dati.squadra||'', ruoli:dati.ruoli||[],
+      vincitore:dati.leader, prezzo:dati.prezzo, ts:Date.now()
+    });
+    await FB.runTransaction(R('utenti/'+dati.leader+'/crediti'), c=>Math.max(0,(c||0)-dati.prezzo));
+    toast(dati.nome+' a '+nomeDi(dati.leader)+' per '+dati.prezzo);
+  } else {
+    toast(dati.nome+' non assegnato');
+  }
+}
 
 /* ---------- listone ---------- */
 function dividi(riga,sep){
@@ -444,15 +465,16 @@ function chipRuoli(r){
 function render(){
   if(!db) return;
   if(!st.pronto){ APP.innerHTML=vistaIngresso(); collega(); return; }
-  const live = st.asta && st.asta.stato==='aperta';
+  const aperte = st.aste.length;
+  const bloccati = impegnati();
   const inSala = Object.keys(st.presenti).length || 1;
   APP.innerHTML=`
   <header class="top"><div class="top-in">
     <div class="io">${esc(st.nome)}<small><i class="stato-rete ${st.online?'':'giu'}"></i>${st.io===st.admin?'banditore':'partecipante'} · ${inSala} in sala</small></div>
-    <div class="crediti num">${mieiCrediti()} <span>cr</span></div>
+    <div class="crediti num">${disponibili()} <span>cr${bloccati?' · '+bloccati+' impegnati':''}</span></div>
   </div>
   <nav class="tabs">
-    <button data-tab="asta" aria-current="${st.tab==='asta'}">Asta${live?'<i class="pallino"></i>':''}</button>
+    <button data-tab="asta" aria-current="${st.tab==='asta'}">Aste${aperte?' '+aperte:''}${aperte?'<i class="pallino"></i>':''}</button>
     <button data-tab="listone" aria-current="${st.tab==='listone'}">Listone</button>
     <button data-tab="rose" aria-current="${st.tab==='rose'}">Rose</button>
     <button data-tab="impostazioni" aria-current="${st.tab==='impostazioni'}">Impostazioni</button>
@@ -482,34 +504,27 @@ function vistaIngresso(){
 }
 
 function vistaAsta(){
-  const a=st.asta;
-  if(!a) return `<div class="card vuoto"><b>Nessuna asta in corso</b>
-    Apri il listone e chiama un giocatore.
+  if(!st.aste.length) return `<div class="card vuoto"><b>Nessuna asta in corso</b>
+    Apri il listone e chiama uno o più giocatori.
     <div style="height:14px"></div>
-    <button class="btn primario" data-tab="listone" style="display:inline-block;padding:11px 20px">Vai al listone</button></div>`;
-
-  const risposte = a.risposte || {};
-  const capo = banditore();
-
-  if(a.stato==='chiusa'){
-    return `<div class="palco">
-      <div class="chiamante">chiamato da ${esc(nomeDi(a.chiamataDa))}</div>
-      <h2 class="nome-gio">${esc(a.nome)}</h2>
-      <div class="squadra">${esc(a.squadra||'')}</div>
-      <div class="ruoli">${chipRuoli(a.ruoli)}</div>
-      <div class="aggiudicato">${a.vincitore
-        ? `<b>${esc(nomeDi(a.vincitore))}</b> se lo prende per <b class="num">${a.prezzo}</b> crediti`
-        : 'Nessuna offerta: giocatore non assegnato'}</div>
-      ${capo?`<div style="height:12px"></div><button class="btn" id="nuova" style="width:100%">Prossima chiamata</button>`:''}
+    <button class="btn primario" data-tab="listone" style="display:inline-block;padding:11px 20px">Vai al listone</button>
     </div>${storicoBreve()}`;
-  }
 
+  const molte = st.aste.length>1;
+  return st.aste.map(a=>cardAsta(a,molte)).join('') + storicoBreve();
+}
+
+function cardAsta(a,compatta){
+  const k = a.chiave;
+  const risposte = a.risposte || {};
+  const capo = capoDi(a);
   const secondi = a.contoFine?Math.max(0,Math.ceil((a.contoFine-Date.now())/1000)):0;
   const mia = risposte[st.io];
   const inTesta = a.leader===st.io;
   const prezzo = a.prezzo||a.base;
+  const disp = disponibili(k);
 
-  return `<div class="palco">
+  return `<div class="palco${compatta?' compatta':''}">
     <div class="chiamante">chiamato da ${esc(nomeDi(a.chiamataDa))}</div>
     <h2 class="nome-gio">${esc(a.nome)}</h2>
     <div class="squadra">${esc(a.squadra||'')} · base ${a.base}</div>
@@ -518,21 +533,21 @@ function vistaAsta(){
     <div class="leader">${a.leader?`in testa <b>${esc(nomeDi(a.leader))}</b>`:'nessuna offerta'}</div>
     ${a.contoFine?`<div class="conto num">Si chiude tra ${secondi}s</div>`:''}
     <div class="rilanci">
-      ${[1,2,5,10].map(d=>`<button data-rilancio="${d}" ${mieiCrediti()<prezzo+d?'disabled':''}>+${d}</button>`).join('')}
+      ${[1,2,5,10].map(d=>`<button data-k="${k}" data-rilancio="${d}" ${disp<prezzo+d?'disabled':''}>+${d}</button>`).join('')}
     </div>
     <div class="riga">
-      <input id="offLibera" type="number" inputmode="numeric" placeholder="offerta libera" min="${prezzo+1}">
-      <button class="btn" id="offInvia" style="flex:0 0 92px">Offri</button>
+      <input id="off-${k}" type="number" inputmode="numeric" placeholder="offerta libera" min="${prezzo+1}">
+      <button class="btn" data-offri="${k}" style="flex:0 0 92px">Offri</button>
     </div>
     <div style="height:8px"></div>
-    <button class="btn rosso" id="passo" style="width:100%" ${mia===0?'disabled':''}>${
+    <button class="btn rosso" data-passo="${k}" style="width:100%" ${mia===0?'disabled':''}>${
       mia===0 ? 'Ti sei ritirato' : (inTesta ? 'Ritira la mia offerta' : 'Non mi interessa')}</button>
     ${capo?`<div class="sep"></div><div class="riga">
-      <button class="btn" id="conto15">${a.contoFine?'Ferma il conto':'Conto da 15s'}</button>
-      <button class="btn verde" id="agg" ${a.leader?'':'disabled'}>Aggiudica a ${prezzo}</button>
+      <button class="btn" data-conto="${k}">${a.contoFine?'Ferma il conto':'Conto da 15s'}</button>
+      <button class="btn verde" data-agg="${k}" ${a.leader?'':'disabled'}>Aggiudica a ${prezzo}</button>
     </div>
     <div style="height:8px"></div>
-    <button class="btn rosso" id="annulla" style="width:100%">Annulla la chiamata</button>`:''}
+    <button class="btn rosso" data-annullachiamata="${k}" style="width:100%">Annulla la chiamata</button>`:''}
     <div class="esiti">
       ${Object.keys(st.utenti).map(u=>{
         const v=risposte[u];
@@ -541,9 +556,8 @@ function vistaAsta(){
         return `<span class="esito off num">${esc(nomeDi(u))} ${v}</span>`;
       }).join('')}
     </div>
-  </div>
-  ${inTesta?'<div class="avviso">Sei in testa: se nessuno rilancia il giocatore è tuo.</div>':''}
-  ${storicoBreve()}`;
+    ${inTesta?'<div class="avviso" style="margin:12px 0 0">Sei in testa: questi crediti restano impegnati fino all\u2019aggiudicazione.</div>':''}
+  </div>`;
 }
 
 function storicoBreve(){
@@ -570,23 +584,25 @@ function vistaListone(){
   if(q) lista=lista.filter(g=>g.nome.toLowerCase().includes(q)||(g.squadra||'').toLowerCase().includes(q));
   const totale=lista.length;
   lista=lista.slice(0,60);
-  const bloccato=st.asta && st.asta.stato==='aperta';
   return `<div class="card">
     <input class="cerca" id="cerca" placeholder="Cerca giocatore o squadra" value="${esc(st.filtro)}" autocomplete="off">
     <div class="filtri">
       <button data-ruolo="" aria-pressed="${st.ruoloF===''}">Tutti</button>
       ${RUOLI.map(r=>`<button data-ruolo="${r}" aria-pressed="${st.ruoloF===r}">${r}</button>`).join('')}
     </div>
-    ${bloccato?'<div class="avviso">Asta in corso: si richiama dopo l\u2019aggiudicazione.</div>':''}
+    ${st.aste.length?`<div class="avviso">${st.aste.length} aste aperte · disponibili ${disponibili()} crediti</div>`:''}
     ${lista.length?lista.map(g=>{
       const pr=p.has(g.nome.toLowerCase());
+      const att=inAsta(g.nome);
       const idx=st.listone.indexOf(g);
       return `<div class="gio ${pr?'preso':''}">
         <div class="gio-info">
           <div class="gio-nome">${esc(g.nome)}</div>
           <div class="gio-sub">${chipRuoli(g.ruoli)}<span>${esc(g.squadra||'')}</span>${g.fvm?`<span class="num">FVM ${g.fvm}</span>`:''}</div>
         </div>
-        ${pr?'<span class="piccolo">preso</span>':`<button class="mini" data-chiama="${idx}" ${bloccato?'disabled':''}>Chiama</button>`}
+        ${pr?'<span class="piccolo">preso</span>'
+            :att?'<span class="piccolo" style="color:var(--oro)">in asta</span>'
+            :`<button class="mini" data-chiama="${idx}">Chiama</button>`}
       </div>`;
     }).join(''):'<p class="piccolo" style="padding:16px 0">Nessun giocatore con questi filtri.</p>'}
     ${totale>60?`<p class="piccolo" style="padding-top:10px">Mostro 60 di ${totale}: restringi con la ricerca.</p>`:''}
@@ -683,12 +699,20 @@ function collega(){
   document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{ st.tab=b.dataset.tab; render(); });
   const entra=$('#entra'); if(entra) entra.onclick=()=>registra($('#rn').value, $('#rc').value);
   document.querySelectorAll('[data-rilancio]').forEach(b=>b.onclick=()=>{
-    const p=(st.asta&&(st.asta.prezzo||st.asta.base))||1;
-    offri(p+parseInt(b.dataset.rilancio,10));
+    const k=b.dataset.k, a=astaDi(k); if(!a) return;
+    offri(k, (a.prezzo||a.base||1)+parseInt(b.dataset.rilancio,10));
   });
-  const oi=$('#offInvia'); if(oi) oi.onclick=()=>{ const v=parseInt($('#offLibera').value||'0',10); if(v>0) offri(v); };
-  const ps=$('#passo'); if(ps) ps.onclick=ritirati;
-  const an=$('#annulla'); if(an) an.onclick=annullaChiamata;
+  document.querySelectorAll('[data-offri]').forEach(b=>b.onclick=()=>{
+    const k=b.dataset.offri, campo=$('#off-'+k);
+    const v=parseInt((campo&&campo.value)||'0',10); if(v>0) offri(k,v);
+  });
+  document.querySelectorAll('[data-passo]').forEach(b=>b.onclick=()=>ritirati(b.dataset.passo));
+  document.querySelectorAll('[data-agg]').forEach(b=>b.onclick=()=>aggiudica(b.dataset.agg));
+  document.querySelectorAll('[data-conto]').forEach(b=>b.onclick=()=>{
+    const k=b.dataset.conto, a=astaDi(k); if(!a) return;
+    a.contoFine ? fermaConto(k) : avviaConto(k,15);
+  });
+  document.querySelectorAll('[data-annullachiamata]').forEach(b=>b.onclick=()=>annullaChiamata(b.dataset.annullachiamata));
   document.querySelectorAll('[data-annulla]').forEach(b=>b.onclick=()=>{
     const v=st.storico.find(x=>x.chiave===b.dataset.annulla); if(v) annullaAcquisto(v);
   });
@@ -696,9 +720,6 @@ function collega(){
     const u=b.dataset.crediti; correggiCrediti(u, $('#cr-'+u).value);
   });
   document.querySelectorAll('[data-rimuovi]').forEach(b=>b.onclick=()=>rimuoviRosa(b.dataset.rimuovi));
-  const ag=$('#agg'); if(ag) ag.onclick=aggiudica;
-  const c15=$('#conto15'); if(c15) c15.onclick=()=> st.asta.contoFine?fermaConto():avviaConto(15);
-  const nv=$('#nuova'); if(nv) nv.onclick=nuovaChiamata;
   const ce=$('#cerca'); if(ce) ce.oninput=()=>{
     const p=ce.selectionStart; st.filtro=ce.value; render();
     const n=$('#cerca'); if(n){ n.focus(); try{ n.setSelectionRange(p,p); }catch(e){} }
@@ -711,7 +732,7 @@ function collega(){
   const ex=$('#esci'); if(ex) ex.onclick=()=>{ memoria('io',''); location.reload(); };
   const rs=$('#reset'); if(rs) rs.onclick=async()=>{
     if(!confirm('Azzerare asta, rose e partecipanti?')) return;
-    await scrivi('asta',null); await scrivi('storico',null);
+    await scrivi('aste',null); await scrivi('asta',null); await scrivi('storico',null);
     await scrivi('utenti',{[st.io]:{nome:st.nome,crediti:mieiCrediti()}});
     await scrivi('presenza',null);
     toast('Mercato azzerato');
