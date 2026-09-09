@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mercato di riparazione — Mantra</title>
+<style>
+  :root{
+    --ink:#131a2a; --panel:#1b2438; --panel-2:#222d45; --line:#2f3c58;
+    --text:#eef2f8; --muted:#8d9bb5;
+    --oro:#f5b43c; --verde:#46c4a4; --rosso:#e5573f;
+    --r-p:#f2c53d; --r-d:#4fb477; --r-e:#35a7a0; --r-c:#4a9ef0; --r-t:#a76cf0; --r-a:#e8564a;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--ink); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    font-size:16px; line-height:1.45; -webkit-text-size-adjust:100%; padding:0 0 44px;
+  }
+  .wrap{max-width:560px;margin:0 auto;padding:0 14px}
+  .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+  button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
+  input,select,textarea{
+    font:inherit;color:var(--text);background:var(--panel-2);
+    border:1px solid var(--line);border-radius:10px;padding:11px 12px;width:100%;
+  }
+  textarea{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
+  input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--oro);outline-offset:1px}
+  .btn{background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:11px 14px;font-weight:600;text-align:center}
+  .btn:active{transform:translateY(1px)}
+  .btn.primario{background:var(--oro);color:#22190a;border-color:var(--oro)}
+  .btn.verde{background:var(--verde);color:#06231c;border-color:var(--verde)}
+  .btn.rosso{background:transparent;color:var(--rosso);border-color:#5a2b25}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .riga{display:flex;gap:8px}
+  .riga>*{flex:1}
+
+  header.top{position:sticky;top:0;z-index:20;background:rgba(19,26,42,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .top-in{display:flex;align-items:center;gap:10px;padding:10px 0}
+  .io{font-weight:700;font-size:15px;letter-spacing:-.01em;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .io small{display:block;font-weight:500;font-size:11.5px;color:var(--muted)}
+  .crediti{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-weight:700;color:var(--oro);white-space:nowrap}
+  .crediti span{color:var(--muted);font-weight:500;font-size:12px}
+  .stato-rete{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--verde);margin-right:5px;vertical-align:middle}
+  .stato-rete.giu{background:var(--rosso)}
+
+  nav.tabs{display:flex;gap:4px;padding:8px 0 12px;overflow-x:auto;scrollbar-width:none}
+  nav.tabs::-webkit-scrollbar{display:none}
+  nav.tabs button{padding:7px 13px;border-radius:999px;color:var(--muted);font-size:14px;font-weight:600;border:1px solid transparent;white-space:nowrap}
+  nav.tabs button[aria-current="true"]{background:var(--panel);border-color:var(--line);color:var(--text)}
+  .pallino{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--rosso);margin-left:5px;vertical-align:middle;animation:pulsa 1.4s infinite}
+  @keyframes pulsa{0%,100%{opacity:1}50%{opacity:.25}}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+  .vuoto{text-align:center;padding:34px 18px;color:var(--muted)}
+  .vuoto b{display:block;color:var(--text);font-size:17px;margin-bottom:6px}
+
+  .palco{background:linear-gradient(170deg,#202b45,#161e30);border:1px solid #33405e;border-radius:18px;padding:18px 16px 16px;margin-bottom:12px}
+  .chiamante{font-size:12.5px;color:var(--muted);margin-bottom:2px}
+  .nome-gio{font-size:clamp(26px,7.5vw,34px);font-weight:800;letter-spacing:-.025em;line-height:1.08;margin:0}
+  .squadra{color:var(--muted);font-size:13.5px;margin-top:3px}
+  .ruoli{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px}
+  .ruolo{font-size:11.5px;font-weight:800;padding:3px 8px;border-radius:6px;color:#0e1420}
+  .cifra{display:flex;align-items:baseline;gap:9px;margin:16px 0 4px}
+  .cifra b{font-size:60px;font-weight:800;color:var(--oro);letter-spacing:-.04em;line-height:.9}
+  .cifra i{font-style:normal;color:var(--muted);font-size:13px}
+  .leader{font-size:14.5px;margin-bottom:14px}
+  .leader b{color:var(--verde)}
+  .conto{margin:0 0 12px;background:#3a1f1a;border:1px solid #6b332a;color:#ffb3a3;border-radius:10px;padding:9px 12px;font-weight:700;text-align:center}
+  .rilanci{display:flex;gap:7px;margin-bottom:8px}
+  .rilanci button{flex:1;background:var(--oro);color:#22190a;border-radius:11px;padding:13px 0;font-weight:800;font-size:17px}
+  .rilanci button:disabled{background:#3a4056;color:var(--muted)}
+  .esiti{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+  .esito{font-size:12.5px;padding:4px 9px;border-radius:999px;background:var(--panel-2);color:var(--muted)}
+  .esito.off{color:var(--oro);background:#3a2f16}
+  .esito.pass{color:#c0796e;text-decoration:line-through}
+  .aggiudicato{background:#123a30;border:1px solid #1f6552;border-radius:12px;padding:13px;text-align:center;margin-top:12px}
+  .aggiudicato b{color:var(--verde)}
+
+  .cerca{margin-bottom:10px}
+  .filtri{display:flex;gap:5px;overflow-x:auto;padding-bottom:8px;margin-bottom:6px;scrollbar-width:none}
+  .filtri::-webkit-scrollbar{display:none}
+  .filtri button{padding:5px 11px;border-radius:999px;border:1px solid var(--line);font-size:13px;font-weight:700;color:var(--muted)}
+  .filtri button[aria-pressed="true"]{background:var(--text);color:var(--ink);border-color:var(--text)}
+  .gio{display:flex;align-items:center;gap:10px;padding:11px 4px;border-bottom:1px solid var(--line)}
+  .gio-info{flex:1;min-width:0}
+  .gio-nome{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gio-sub{font-size:12.5px;color:var(--muted);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .gio.preso{opacity:.4}
+  .gio.preso .gio-nome{text-decoration:line-through}
+  .mini{padding:8px 12px;border-radius:9px;background:var(--panel-2);border:1px solid var(--line);font-size:13.5px;font-weight:700}
+  .rosa-h{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
+  .rosa-h b{font-size:16px}
+  .rosa-h span{color:var(--oro);font-weight:700}
+  .acq{display:flex;justify-content:space-between;gap:10px;font-size:14px;padding:5px 0;border-bottom:1px dashed #26314a}
+  .acq span{color:var(--muted)}
+  .avviso{background:#3a2f16;border:1px solid #6b5622;color:#f0d493;border-radius:10px;padding:10px 12px;font-size:13.5px;margin-bottom:10px}
+  label.et{display:block;font-size:13px;color:var(--muted);margin:12px 0 5px}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:11px 16px;font-size:14px;z-index:60;max-width:88vw;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+  .sep{height:1px;background:var(--line);margin:16px 0}
+  .piccolo{font-size:12.5px;color:var(--muted)}
+  ol.passi{padding-left:20px;margin:0;font-size:13.5px;color:var(--muted)}
+  ol.passi li{margin-bottom:7px}
+  code{background:var(--panel-2);padding:1px 5px;border-radius:5px;font-size:12.5px}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div id="app" class="wrap"></div>
+<div id="toast" style="display:none" class="toast"></div>
+
+<script type="module">
+/* ══════════════════════════════════════════════════════════════
+   1) INCOLLA QUI LA CONFIGURAZIONE FIREBASE DEL TUO PROGETTO
+      (Impostazioni progetto → Le tue app → Configurazione SDK)
+      Serve soprattutto databaseURL: senza, l'app mostra la guida.
+   ══════════════════════════════════════════════════════════════ */
+const FIREBASE = {
+  apiKey: "AIzaSyDxD6onXhJanbpVnZNp3vbpqQJSwMtcIvQ",
+  authDomain: "mercato-agnelli.firebaseapp.com",
+  databaseURL: "https://mercato-agnelli-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "mercato-agnelli",
+  storageBucket: "mercato-agnelli.firebasestorage.app",
+  messagingSenderId: "979881189960",
+  appId: "1:979881189960:web:9102eb6f9d9b3bac52ae7d"
+};
+const RADICE = "mercato";   /* cambia stringa per aprire un mercato nuovo da zero */
+
+/* ══════════════════════════════════════════════════════════════ */
+
+const APP = document.getElementById('app');
+const $ = s => document.querySelector(s);
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const RUOLI = ['Por','Dd','Dc','Ds','B','E','M','C','W','T','A','Pc'];
+const COL = {Por:'--r-p',Dd:'--r-d',Dc:'--r-d',Ds:'--r-d',B:'--r-d',E:'--r-e',M:'--r-c',C:'--r-c',W:'--r-t',T:'--r-t',A:'--r-a',Pc:'--r-a'};
+let toastT;
+function toast(m){ const t=$('#toast'); t.textContent=m; t.style.display='block';
+  clearTimeout(toastT); toastT=setTimeout(()=>t.style.display='none',2800); }
+
+function memoria(k,v){
+  try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k,v); }catch(e){}
+  return null;
+}
+function configurazione(){
+  if(FIREBASE.databaseURL) return FIREBASE;
+  const s = memoria('fbconf');
+  if(s){ try{ return JSON.parse(s); }catch(e){} }
+  return null;
+}
+
+/* ---------- carico l'SDK ---------- */
+let FB=null;
+try{
+  const [a,d] = await Promise.all([
+    import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js'),
+    import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js')
+  ]);
+  FB = Object.assign({},a,d);
+}catch(e){
+  APP.innerHTML = '<div class="card" style="margin-top:40px"><div class="rosa-h"><b>Firebase non raggiungibile</b></div>'
+    +'<p class="piccolo" style="margin:0">Il browser non è riuscito a scaricare le librerie da gstatic.com. '
+    +'Controlla la connessione e ricarica.</p></div>';
+}
+
+let db=null, st={
+  io:null, nome:'', tab:'asta', filtro:'', ruoloF:'',
+  asta:null, utenti:{}, storico:[], listone:[], admin:null, presenti:{}, online:false, pronto:false
+};
+
+if(FB){
+  const conf = configurazione();
+  if(!conf) mostraGuida();
+  else {
+    try{
+      const app = FB.initializeApp(conf);
+      db = FB.getDatabase(app);
+      avvio();
+    }catch(e){
+      APP.innerHTML='<div class="card" style="margin-top:40px"><div class="rosa-h"><b>Configurazione non valida</b></div>'
+        +'<p class="piccolo">'+esc(e.message)+'</p></div>';
+    }
+  }
+}
+
+/* ---------- scorciatoie database ---------- */
+const R = p => FB.ref(db, RADICE+'/'+p);
+const leggi = async p => (await FB.get(R(p))).val();
+const scrivi = (p,v) => FB.set(R(p),v);
+const aggiorna = (p,v) => FB.update(R(p),v);
+
+/* ---------- avvio ---------- */
+function avvio(){
+  const salvato = memoria('io');
+  if(salvato){ const o=JSON.parse(salvato); st.io=o.id; st.nome=o.nome; st.pronto=true; }
+
+  FB.onValue(R('asta'), s=>{ st.asta=s.val(); gestisciConto(); render(); });
+  FB.onValue(R('utenti'), s=>{ st.utenti=s.val()||{}; render(); });
+  FB.onValue(R('storico'), s=>{ const v=s.val()||{}; st.storico=Object.values(v).sort((a,b)=>a.ts-b.ts); render(); });
+  FB.onValue(R('config'), s=>{ const c=s.val(); st.admin=c&&c.admin; render(); });
+  FB.onValue(R('listone'), s=>{ st.listone=s.val()||[]; render(); });
+  FB.onValue(R('presenza'), s=>{ st.presenti=s.val()||{}; render(); });
+  FB.onValue(FB.ref(db,'.info/connected'), s=>{ st.online=!!s.val(); if(s.val()) presenza(); render(); });
+
+  setInterval(()=>{ if(st.asta&&st.asta.contoFine) render(); }, 1000);
+  render();
+}
+
+function presenza(){
+  if(!st.io) return;
+  const p = R('presenza/'+st.io);
+  FB.set(p, Date.now());
+  FB.onDisconnect(p).remove();
+}
+
+/* ---------- ingresso ---------- */
+const slug = s => s.toLowerCase().trim().replace(/\s+/g,'-').replace(/[^a-z0-9\-_]/g,'').slice(0,24);
+
+async function registra(nome,crediti){
+  const id=slug(nome||'');
+  if(!id){ toast('Scrivi il nome della squadra'); return; }
+  const cr=Math.max(0,parseInt(crediti,10)||0);
+  try{
+    const esiste = await leggi('utenti/'+id);
+    if(esiste && esiste.nome && esiste.nome.toLowerCase()!==nome.trim().toLowerCase()){ toast('Nome già in uso'); return; }
+    await scrivi('utenti/'+id, {nome:nome.trim(), crediti: esiste?esiste.crediti:cr});
+    const cfg = await leggi('config');
+    if(!cfg || !cfg.admin) await scrivi('config',{admin:id, creato:Date.now()});
+    st.io=id; st.nome=nome.trim(); st.pronto=true;
+    memoria('io', JSON.stringify({id,nome:st.nome}));
+    presenza(); render();
+  }catch(e){ toast('Ingresso non riuscito: '+e.message); }
+}
+const mieiCrediti = () => (st.utenti[st.io] && st.utenti[st.io].crediti) || 0;
+const nomeDi = id => id ? ((st.utenti[id]&&st.utenti[id].nome) || id.replace(/-/g,' ')) : '—';
+const banditore = () => st.asta && (st.asta.chiamataDa===st.io || st.admin===st.io);
+
+async function aggiornaCrediti(n){
+  await scrivi('utenti/'+st.io+'/crediti', Math.max(0,parseInt(n,10)||0));
+  toast('Crediti aggiornati');
+}
+
+/* ---------- asta ---------- */
+async function chiama(g){
+  if(!g) return;
+  const base=Math.max(1,g.base||1);
+  if(base>mieiCrediti()){ toast('Base '+base+', tu hai '+mieiCrediti()); return; }
+  const nuova={
+    id:'a'+Date.now().toString(36), nome:g.nome, squadra:g.squadra||'', ruoli:g.ruoli||[],
+    base, chiamataDa:st.io, stato:'aperta', prezzo:base, leader:st.io,
+    ts:Date.now(), contoFine:0, risposte:{[st.io]:base}
+  };
+  const res = await FB.runTransaction(R('asta'), a=>{
+    if(a && a.stato==='aperta') return;      /* qualcuno ha chiamato un attimo prima */
+    return nuova;
+  });
+  if(!res.committed){ toast('C\u2019è già un\u2019asta aperta'); return; }
+  st.tab='asta'; render();
+}
+
+async function offri(imp){
+  const a=st.asta; if(!a || a.stato!=='aperta') return;
+  if(imp>mieiCrediti()){ toast('Hai solo '+mieiCrediti()+' crediti'); return; }
+  if(imp===0){ await scrivi('asta/risposte/'+st.io, 0); toast('Hai passato su '+a.nome); return; }
+  const res = await FB.runTransaction(R('asta'), x=>{
+    if(!x || x.stato!=='aperta' || x.id!==a.id) return;
+    if(imp <= (x.prezzo||0)) return;
+    x.prezzo=imp; x.leader=st.io; x.ts=Date.now(); x.contoFine=0;
+    x.risposte = Object.assign({}, x.risposte||{}, {[st.io]:imp});
+    return x;
+  });
+  if(!res.committed) toast('Rilancio non valido: qualcuno ti ha superato');
+}
+
+async function avviaConto(sec){
+  const a=st.asta; if(!a) return;
+  await aggiorna('asta',{contoFine:Date.now()+sec*1000, contoBase:a.prezzo});
+}
+async function fermaConto(){ await aggiorna('asta',{contoFine:0}); }
+
+let chiusuraInCorso=false;
+function gestisciConto(){
+  const a=st.asta;
+  if(!a || a.stato!=='aperta' || !a.contoFine || !banditore() || chiusuraInCorso) return;
+  if(Date.now() > a.contoFine+300){ chiusuraInCorso=true; aggiudica().finally(()=>chiusuraInCorso=false); }
+}
+
+async function aggiudica(){
+  const a=st.asta; if(!a || a.stato!=='aperta') return;
+  const res = await FB.runTransaction(R('asta'), x=>{
+    if(!x || x.stato!=='aperta') return;
+    x.stato='chiusa'; x.vincitore=x.leader||null; x.contoFine=0; x.chiusaTs=Date.now();
+    return x;
+  });
+  if(!res.committed) return;
+  const fin = res.snapshot.val();
+  if(fin.vincitore){
+    await FB.push(R('storico'), {
+      nome:fin.nome, squadra:fin.squadra||'', ruoli:fin.ruoli||[],
+      vincitore:fin.vincitore, prezzo:fin.prezzo, ts:Date.now()
+    });
+    await FB.runTransaction(R('utenti/'+fin.vincitore+'/crediti'), c=>Math.max(0,(c||0)-fin.prezzo));
+  }
+}
+async function nuovaChiamata(){ await scrivi('asta', null); st.tab='listone'; render(); }
+
+/* ---------- listone ---------- */
+function dividi(riga,sep){
+  const out=[]; let cur='', q=false;
+  for(let i=0;i<riga.length;i++){
+    const c=riga[i];
+    if(c==='"'){ if(q && riga[i+1]==='"'){cur+='"';i++;} else q=!q; }
+    else if(c===sep && !q){ out.push(cur); cur=''; }
+    else cur+=c;
+  }
+  out.push(cur);
+  return out.map(s=>s.trim().replace(/^"|"$/g,''));
+}
+function normalizzaRuoli(grezzo){
+  return String(grezzo||'').split(/[;,\/\s]+/).map(r=>{
+    const t=r.trim(); const m=RUOLI.find(x=>x.toLowerCase()===t.toLowerCase()); return m||t;
+  }).filter(r=>r && r.length<=3).slice(0,4);
+}
+
+/* formato esportato da Fantacalcio: "Bleve - LEC (Por)" oppure "Biraghi - TOR (B; Ds; E)" */
+function parseElenco(txt){
+  const re = /^(.+?)\s*[-\u2013]\s*([A-Za-z]{2,4})\s*\(([^)]+)\)\s*$/;
+  const out=[];
+  for(const l of txt.split(/\r?\n/)){
+    const m = l.trim().match(re);
+    if(!m) continue;
+    const ruoli = normalizzaRuoli(m[3]);
+    if(!ruoli.length) continue;
+    out.push({nome:m[1].trim(), squadra:m[2].toUpperCase(), ruoli, base:1, fvm:0});
+  }
+  return out;
+}
+
+function interpreta(txt){
+  const t = txt.trim();
+  if(!t) throw new Error('Il file è vuoto.');
+  if(t.startsWith('{') && /playersId/.test(t))
+    throw new Error('Il file .fclist contiene solo codici numerici, non i nomi: usa il file di testo con l\u2019elenco.');
+  const elenco = parseElenco(t);
+  if(elenco.length >= 5) return elenco;
+  return parseListone(t);
+}
+
+function parseListone(txt){
+  const righe=txt.trim().split(/\r?\n/).filter(r=>r.trim());
+  if(!righe.length) throw new Error('Il campo è vuoto.');
+  let sep='\t', meglio=0;
+  for(const c of ['\t',';',',']){ const n=dividi(righe[0],c).length; if(n>meglio){meglio=n;sep=c;} }
+  if(meglio<2) throw new Error('Colonne non riconosciute: copia le celle dall\u2019Excel.');
+  const hi=righe.findIndex(r=>/nome/i.test(r));
+  if(hi<0) throw new Error('Manca l\u2019intestazione con la colonna Nome.');
+  const head=dividi(righe[hi],sep).map(h=>h.toLowerCase().replace(/\./g,'').trim());
+  const trova=(...alt)=>{ for(const a of alt){ const i=head.indexOf(a); if(i>=0) return i; } return -1; };
+  const iNome=trova('nome','giocatore'), iSq=trova('squadra','team'),
+        iRM=trova('rm','ruoli','ruolo mantra'), iR=trova('r','ruolo'),
+        iQ=trova('qta m','qt a m','qta','qt a','quota'), iF=trova('fvm m','fvm');
+  if(iNome<0) throw new Error('Colonna Nome non trovata.');
+  const out=[];
+  for(let i=hi+1;i<righe.length;i++){
+    const c=dividi(righe[i],sep);
+    const nome=(c[iNome]||'').trim();
+    if(!nome || /^nome$/i.test(nome)) continue;
+    const grezzo=(iRM>=0 && c[iRM]) ? c[iRM] : (iR>=0 ? (c[iR]||'') : '');
+    const ruoli=normalizzaRuoli(grezzo);
+    out.push({nome, squadra:(iSq>=0?c[iSq]:'')||'', ruoli,
+      base:Math.max(1,parseInt((iQ>=0?c[iQ]:'')||'1',10)||1),
+      fvm:parseInt((iF>=0?c[iF]:'')||'0',10)||0});
+  }
+  if(!out.length) throw new Error('Nessun giocatore letto.');
+  return out;
+}
+async function salvaListone(txt){
+  let dati; try{ dati=interpreta(txt); }catch(e){ toast(e.message); return; }
+  try{ await scrivi('listone', dati); toast(dati.length+' giocatori caricati'); st.tab='listone'; render(); }
+  catch(e){ toast('Salvataggio non riuscito: '+e.message); }
+}
+function leggiFile(f){
+  if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>salvaListone(String(r.result||''));
+  r.onerror=()=>toast('Non riesco a leggere il file');
+  r.readAsText(f);
+}
+const presi = () => new Set(st.storico.map(v=>v.nome.toLowerCase()));
+
+/* ---------- viste ---------- */
+function chipRuoli(r){
+  return (r||[]).map(x=>`<span class="ruolo" style="background:var(${COL[x]||'--muted'})">${esc(x)}</span>`).join('');
+}
+function render(){
+  if(!db) return;
+  if(!st.pronto){ APP.innerHTML=vistaIngresso(); collega(); return; }
+  const live = st.asta && st.asta.stato==='aperta';
+  const inSala = Object.keys(st.presenti).length || 1;
+  APP.innerHTML=`
+  <header class="top"><div class="top-in">
+    <div class="io">${esc(st.nome)}<small><i class="stato-rete ${st.online?'':'giu'}"></i>${st.io===st.admin?'banditore':'partecipante'} · ${inSala} in sala</small></div>
+    <div class="crediti num">${mieiCrediti()} <span>cr</span></div>
+  </div>
+  <nav class="tabs">
+    <button data-tab="asta" aria-current="${st.tab==='asta'}">Asta${live?'<i class="pallino"></i>':''}</button>
+    <button data-tab="listone" aria-current="${st.tab==='listone'}">Listone</button>
+    <button data-tab="rose" aria-current="${st.tab==='rose'}">Rose</button>
+    <button data-tab="impostazioni" aria-current="${st.tab==='impostazioni'}">Impostazioni</button>
+  </nav></header>
+  ${st.online?'':'<div class="avviso">Sei offline: le offerte partono appena torna la connessione.</div>'}
+  ${st.tab==='asta'?vistaAsta():''}
+  ${st.tab==='listone'?vistaListone():''}
+  ${st.tab==='rose'?vistaRose():''}
+  ${st.tab==='impostazioni'?vistaImpostazioni():''}`;
+  collega();
+}
+
+function vistaIngresso(){
+  return `<div style="padding:36px 0 0">
+    <h1 style="font-size:30px;letter-spacing:-.03em;margin:0 0 6px">Mercato di riparazione</h1>
+    <p class="piccolo" style="margin:0 0 22px">Lega Mantra · asta a chiamata. Entra con il nome della tua squadra e i crediti che ti restano.</p>
+    <div class="card">
+      <label class="et" for="rn">Nome squadra</label>
+      <input id="rn" placeholder="es. Flamengo FC" autocomplete="off">
+      <label class="et" for="rc">Crediti residui</label>
+      <input id="rc" type="number" inputmode="numeric" value="0" min="0">
+      <div style="height:14px"></div>
+      <button class="btn primario" id="entra" style="width:100%">Entra nella sala</button>
+    </div>
+    <p class="piccolo">Chi entra per primo diventa banditore: carica il listone e aggiudica i giocatori.</p>
+  </div>`;
+}
+
+function vistaAsta(){
+  const a=st.asta;
+  if(!a) return `<div class="card vuoto"><b>Nessuna asta in corso</b>
+    Apri il listone e chiama un giocatore.
+    <div style="height:14px"></div>
+    <button class="btn primario" data-tab="listone" style="display:inline-block;padding:11px 20px">Vai al listone</button></div>`;
+
+  const risposte = a.risposte || {};
+  const capo = banditore();
+
+  if(a.stato==='chiusa'){
+    return `<div class="palco">
+      <div class="chiamante">chiamato da ${esc(nomeDi(a.chiamataDa))}</div>
+      <h2 class="nome-gio">${esc(a.nome)}</h2>
+      <div class="squadra">${esc(a.squadra||'')}</div>
+      <div class="ruoli">${chipRuoli(a.ruoli)}</div>
+      <div class="aggiudicato">${a.vincitore
+        ? `<b>${esc(nomeDi(a.vincitore))}</b> se lo prende per <b class="num">${a.prezzo}</b> crediti`
+        : 'Nessuna offerta: giocatore non assegnato'}</div>
+      ${capo?`<div style="height:12px"></div><button class="btn" id="nuova" style="width:100%">Prossima chiamata</button>`:''}
+    </div>${storicoBreve()}`;
+  }
+
+  const secondi = a.contoFine?Math.max(0,Math.ceil((a.contoFine-Date.now())/1000)):0;
+  const mia = risposte[st.io];
+  const inTesta = a.leader===st.io;
+  const prezzo = a.prezzo||a.base;
+
+  return `<div class="palco">
+    <div class="chiamante">chiamato da ${esc(nomeDi(a.chiamataDa))}</div>
+    <h2 class="nome-gio">${esc(a.nome)}</h2>
+    <div class="squadra">${esc(a.squadra||'')} · base ${a.base}</div>
+    <div class="ruoli">${chipRuoli(a.ruoli)}</div>
+    <div class="cifra"><b class="num">${prezzo}</b><i>crediti</i></div>
+    <div class="leader">in testa <b>${esc(nomeDi(a.leader))}</b></div>
+    ${a.contoFine?`<div class="conto num">Si chiude tra ${secondi}s</div>`:''}
+    <div class="rilanci">
+      ${[1,2,5,10].map(d=>`<button data-rilancio="${d}" ${mieiCrediti()<prezzo+d?'disabled':''}>+${d}</button>`).join('')}
+    </div>
+    <div class="riga">
+      <input id="offLibera" type="number" inputmode="numeric" placeholder="offerta libera" min="${prezzo+1}">
+      <button class="btn" id="offInvia" style="flex:0 0 92px">Offri</button>
+    </div>
+    <div style="height:8px"></div>
+    <button class="btn rosso" id="passo" style="width:100%" ${mia===0?'disabled':''}>${mia===0?'Hai passato':'Non mi interessa'}</button>
+    ${capo?`<div class="sep"></div><div class="riga">
+      <button class="btn" id="conto15">${a.contoFine?'Ferma il conto':'Conto da 15s'}</button>
+      <button class="btn verde" id="agg">Aggiudica a ${prezzo}</button>
+    </div>`:''}
+    <div class="esiti">
+      ${Object.keys(st.utenti).map(u=>{
+        const v=risposte[u];
+        if(v===undefined) return `<span class="esito">${esc(nomeDi(u))}</span>`;
+        if(v===0) return `<span class="esito pass">${esc(nomeDi(u))}</span>`;
+        return `<span class="esito off num">${esc(nomeDi(u))} ${v}</span>`;
+      }).join('')}
+    </div>
+  </div>
+  ${inTesta?'<div class="avviso">Sei in testa: se nessuno rilancia il giocatore è tuo.</div>':''}
+  ${storicoBreve()}`;
+}
+
+function storicoBreve(){
+  if(!st.storico.length) return '';
+  return `<div class="card"><div class="rosa-h"><b>Ultimi acquisti</b></div>
+    ${st.storico.slice(-5).reverse().map(v=>`<div class="acq">
+      <span style="color:var(--text)">${esc(v.nome)}</span>
+      <span>${esc(nomeDi(v.vincitore))} · <b style="color:var(--oro)" class="num">${v.prezzo}</b></span></div>`).join('')}</div>`;
+}
+
+function vistaListone(){
+  if(!st.listone.length){
+    return `<div class="card vuoto"><b>Listone non caricato</b>
+      ${st.admin&&st.admin!==st.io?'Aspetta che lo carichi il banditore.':'Incollalo dalle impostazioni.'}
+      <div style="height:14px"></div>
+      <button class="btn primario" data-tab="impostazioni" style="display:inline-block;padding:11px 20px">Carica il listone</button></div>`;
+  }
+  const p=presi(), q=st.filtro.toLowerCase();
+  let lista=st.listone;
+  if(st.ruoloF) lista=lista.filter(g=>(g.ruoli||[]).includes(st.ruoloF));
+  if(q) lista=lista.filter(g=>g.nome.toLowerCase().includes(q)||(g.squadra||'').toLowerCase().includes(q));
+  const totale=lista.length;
+  lista=lista.slice(0,60);
+  const bloccato=st.asta && st.asta.stato==='aperta';
+  return `<div class="card">
+    <input class="cerca" id="cerca" placeholder="Cerca giocatore o squadra" value="${esc(st.filtro)}" autocomplete="off">
+    <div class="filtri">
+      <button data-ruolo="" aria-pressed="${st.ruoloF===''}">Tutti</button>
+      ${RUOLI.map(r=>`<button data-ruolo="${r}" aria-pressed="${st.ruoloF===r}">${r}</button>`).join('')}
+    </div>
+    ${bloccato?'<div class="avviso">Asta in corso: si richiama dopo l\u2019aggiudicazione.</div>':''}
+    ${lista.length?lista.map(g=>{
+      const pr=p.has(g.nome.toLowerCase());
+      const idx=st.listone.indexOf(g);
+      return `<div class="gio ${pr?'preso':''}">
+        <div class="gio-info">
+          <div class="gio-nome">${esc(g.nome)}</div>
+          <div class="gio-sub">${chipRuoli(g.ruoli)}<span>${esc(g.squadra||'')}</span>${g.fvm?`<span class="num">FVM ${g.fvm}</span>`:''}</div>
+        </div>
+        ${pr?'<span class="piccolo">preso</span>':`<button class="mini" data-chiama="${idx}" ${bloccato?'disabled':''}>Chiama</button>`}
+      </div>`;
+    }).join(''):'<p class="piccolo" style="padding:16px 0">Nessun giocatore con questi filtri.</p>'}
+    ${totale>60?`<p class="piccolo" style="padding-top:10px">Mostro 60 di ${totale}: restringi con la ricerca.</p>`:''}
+  </div>`;
+}
+
+function vistaRose(){
+  const ids=Object.keys(st.utenti);
+  if(!ids.length) return '<div class="card vuoto">Nessuno è ancora entrato.</div>';
+  return `<div>
+    ${ids.map(u=>{
+      const acq=st.storico.filter(v=>v.vincitore===u);
+      const spesi=acq.reduce((s,v)=>s+v.prezzo,0);
+      return `<div class="card">
+        <div class="rosa-h"><b>${esc(nomeDi(u))}</b><span class="num">${acq.length} acquisti · ${spesi} spesi · ${st.utenti[u].crediti} residui</span></div>
+        ${acq.length?acq.map(v=>`<div class="acq"><span style="color:var(--text)">${esc(v.nome)} ${chipRuoli(v.ruoli)}</span><span class="num">${v.prezzo}</span></div>`).join('')
+          :'<p class="piccolo" style="margin:4px 0 0">Ancora nessun acquisto.</p>'}
+      </div>`;
+    }).join('')}
+    <p class="piccolo">Limiti della lega: massimo 30 giocatori in rosa, minimo 2 portieri.</p>
+  </div>`;
+}
+
+function vistaImpostazioni(){
+  const capo = st.admin===st.io || !st.admin;
+  return `<div class="card">
+    <div class="rosa-h"><b>I tuoi crediti</b></div>
+    <div class="riga">
+      <input id="cr" type="number" inputmode="numeric" value="${mieiCrediti()}" min="0">
+      <button class="btn" id="salvaCr" style="flex:0 0 92px">Salva</button>
+    </div>
+    <p class="piccolo" style="margin-top:8px">Si scalano da soli a ogni aggiudicazione.</p>
+  </div>
+  ${capo?`<div class="card">
+    <div class="rosa-h"><b>Listone</b><span class="num">${st.listone.length||0}</span></div>
+    <p class="piccolo" style="margin:0 0 8px">Carica il file di testo esportato da Fantacalcio (righe tipo <code>Bleve - LEC (Por)</code>) oppure le righe copiate dall\u2019Excel del listone. Il file <code>.fclist</code> non va bene: contiene solo codici numerici.</p>
+    <input type="file" id="fileListone" accept=".txt,.csv,.tsv,.fclist,text/plain">
+    <div style="height:10px"></div>
+    <p class="piccolo" style="margin:0 0 6px">Oppure incolla direttamente:</p>
+    <textarea id="txtListone" rows="4" placeholder="Bleve - LEC (Por)"></textarea>
+    <div style="height:8px"></div>
+    <button class="btn primario" id="importa" style="width:100%">Carica il listone</button>
+  </div>
+  <div class="card">
+    <div class="rosa-h"><b>Sala</b></div>
+    <p class="piccolo" style="margin:0 0 10px">Azzera asta, rose, acquisti e partecipanti. Il listone resta.</p>
+    <button class="btn rosso" id="reset" style="width:100%">Azzera il mercato</button>
+  </div>`:''}
+  <div class="card">
+    <div class="rosa-h"><b>Come funziona</b></div>
+    <p class="piccolo" style="margin:0">Chi chiama apre l\u2019asta alla quota di listino e risulta subito in testa. Gli altri rilanciano o toccano "Non mi interessa". Si chiude quando il banditore aggiudica; il conto da 15 secondi è opzionale e ogni rilancio lo azzera.</p>
+  </div>
+  <button class="btn" id="esci" style="width:100%">Esci da questa squadra</button>`;
+}
+
+function mostraGuida(){
+  APP.innerHTML = `<div style="padding:34px 0 0">
+    <h1 style="font-size:27px;letter-spacing:-.03em;margin:0 0 6px">Manca la connessione al database</h1>
+    <p class="piccolo" style="margin:0 0 20px">Cinque minuti una volta sola, poi il link funziona per tutto il gruppo.</p>
+    <div class="card">
+      <ol class="passi">
+        <li>Vai su <code>console.firebase.google.com</code> e crea un progetto (senza Analytics).</li>
+        <li>Menu <b>Build → Realtime Database → Crea database</b>, zona Europa, avvia in <b>modalità test</b>.</li>
+        <li>Scheda <b>Regole</b>: metti <code>{"rules":{".read":true,".write":true}}</code> e pubblica.</li>
+        <li>Icona ingranaggio → <b>Impostazioni progetto</b> → in fondo <b>Le tue app</b> → app web <b>&lt;/&gt;</b> → registra e copia l\u2019oggetto <code>firebaseConfig</code>.</li>
+        <li>Incollalo qui sotto per provare subito, e nel file al posto della sezione FIREBASE per il gruppo.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <label class="et" for="conf">Oggetto firebaseConfig</label>
+      <textarea id="conf" rows="7" placeholder='{ "apiKey": "...", "databaseURL": "https://....firebasedatabase.app", ... }'></textarea>
+      <div style="height:10px"></div>
+      <button class="btn primario" id="salvaConf" style="width:100%">Collega</button>
+    </div>
+  </div>`;
+  $('#salvaConf').onclick = ()=>{
+    const t = $('#conf').value.trim().replace(/^(const|let|var)\s+\w+\s*=\s*/,'').replace(/;\s*$/,'');
+    let o; try{ o = (new Function('return ('+t+')'))(); }catch(e){ toast('Testo non riconosciuto'); return; }
+    if(!o || !o.databaseURL){ toast('Manca databaseURL nella configurazione'); return; }
+    memoria('fbconf', JSON.stringify(o));
+    location.reload();
+  };
+}
+
+/* ---------- eventi ---------- */
+function collega(){
+  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{ st.tab=b.dataset.tab; render(); });
+  const entra=$('#entra'); if(entra) entra.onclick=()=>registra($('#rn').value, $('#rc').value);
+  document.querySelectorAll('[data-rilancio]').forEach(b=>b.onclick=()=>{
+    const p=(st.asta&&(st.asta.prezzo||st.asta.base))||1;
+    offri(p+parseInt(b.dataset.rilancio,10));
+  });
+  const oi=$('#offInvia'); if(oi) oi.onclick=()=>{ const v=parseInt($('#offLibera').value||'0',10); if(v>0) offri(v); };
+  const ps=$('#passo'); if(ps) ps.onclick=()=>offri(0);
+  const ag=$('#agg'); if(ag) ag.onclick=aggiudica;
+  const c15=$('#conto15'); if(c15) c15.onclick=()=> st.asta.contoFine?fermaConto():avviaConto(15);
+  const nv=$('#nuova'); if(nv) nv.onclick=nuovaChiamata;
+  const ce=$('#cerca'); if(ce) ce.oninput=()=>{
+    const p=ce.selectionStart; st.filtro=ce.value; render();
+    const n=$('#cerca'); if(n){ n.focus(); try{ n.setSelectionRange(p,p); }catch(e){} }
+  };
+  document.querySelectorAll('[data-ruolo]').forEach(b=>b.onclick=()=>{ st.ruoloF=b.dataset.ruolo; render(); });
+  document.querySelectorAll('[data-chiama]').forEach(b=>b.onclick=()=>chiama(st.listone[parseInt(b.dataset.chiama,10)]));
+  const im=$('#importa'); if(im) im.onclick=()=>salvaListone($('#txtListone').value);
+  const fl=$('#fileListone'); if(fl) fl.onchange=()=>leggiFile(fl.files[0]);
+  const sc=$('#salvaCr'); if(sc) sc.onclick=()=>aggiornaCrediti($('#cr').value);
+  const ex=$('#esci'); if(ex) ex.onclick=()=>{ memoria('io',''); location.reload(); };
+  const rs=$('#reset'); if(rs) rs.onclick=async()=>{
+    if(!confirm('Azzerare asta, rose e partecipanti?')) return;
+    await scrivi('asta',null); await scrivi('storico',null);
+    await scrivi('utenti',{[st.io]:{nome:st.nome,crediti:mieiCrediti()}});
+    await scrivi('presenza',null);
+    toast('Mercato azzerato');
+  };
+}
+</script>
+</body>
+</html>
